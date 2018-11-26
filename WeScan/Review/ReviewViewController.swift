@@ -18,32 +18,52 @@ final class ReviewViewController: UIViewController {
         let imageView = UIImageView()
         imageView.clipsToBounds = true
         imageView.isOpaque = true
-        imageView.image = results.scannedImage
+//        imageView.image = results.scannedImage
+        imageView.image = results.scannedImage.filter(name: "CIColorControls", parameters: ["inputContrast":1.35])
         imageView.backgroundColor = .black
         imageView.contentMode = .scaleAspectFit
         imageView.translatesAutoresizingMaskIntoConstraints = false
         return imageView
     }()
     
-    lazy private var enhanceButton: UIBarButtonItem = {
-        let image = UIImage(named: "enhance", in: Bundle(for: ScannerViewController.self), compatibleWith: nil)
-        let button = UIBarButtonItem(image: image, style: .plain, target: self, action: #selector(toggleEnhancedImage))
-        button.tintColor = .white
+    lazy private var editEdgesButton: UIButton = {
+        let button = UIButton()
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.setTitle(NSLocalizedString("Edit Edges", comment: ""), for: .normal)
+        button.tintColor = UIColor.white
+        button.titleLabel?.font = UIFont.boldSystemFont(ofSize: 19)
+        button.addTarget(self, action: #selector(self.editEdges), for: .touchUpInside)
         return button
     }()
     
+    lazy private var editColorsButton: UIButton = {
+        let button = UIButton()
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.setTitle(NSLocalizedString("Restore Colors", comment: ""), for: .normal)
+        button.tintColor = UIColor.white
+        button.titleLabel?.font = UIFont.boldSystemFont(ofSize: 19)
+        button.addTarget(self, action: #selector(self.editColors), for: .touchUpInside)
+        return button
+    }()
+    
+    
     lazy private var doneButton: UIBarButtonItem = {
-        let button = UIBarButtonItem(barButtonSystemItem: .done, target: self, action: #selector(finishScan))
+        let title = NSLocalizedString("wescan.review.button.done", tableName: nil, bundle: Bundle(for: ReviewViewController.self), value: "Done", comment: "A generic done button")
+        let button = UIBarButtonItem(title: title, style: .done, target: self, action: #selector(finishScan))
         button.tintColor = navigationController?.navigationBar.tintColor
         return button
     }()
     
-    private let results: ImageScannerResults
+    private var results: ImageScannerResults
+    private var quad: Quadrilateral
+    private var originalScannedImage: UIImage
     
     // MARK: - Life Cycle
     
-    init(results: ImageScannerResults) {
+    init(results: ImageScannerResults , quad: Quadrilateral) {
         self.results = results
+        self.quad = quad
+        self.originalScannedImage = results.scannedImage
         super.init(nibName: nil, bundle: nil)
     }
     
@@ -57,7 +77,6 @@ final class ReviewViewController: UIViewController {
         enhancedImageIsAvailable = results.enhancedImage != nil
         
         setupViews()
-        setupToolbar()
         setupConstraints()
         
         title = NSLocalizedString("wescan.review.title", tableName: nil, bundle: Bundle(for: ReviewViewController.self), value: "Review", comment: "The review title of the ReviewController")
@@ -66,7 +85,7 @@ final class ReviewViewController: UIViewController {
     
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        
+        navigationController?.setNavigationBarHidden(false, animated: true)
         // We only show the toolbar (with the enhance button) if the enhanced image is available.
         if enhancedImageIsAvailable {
             navigationController?.setToolbarHidden(false, animated: true)
@@ -82,16 +101,10 @@ final class ReviewViewController: UIViewController {
     
     private func setupViews() {
         view.addSubview(imageView)
+        view.insertSubview(editColorsButton, aboveSubview: imageView)
+        view.insertSubview(editEdgesButton, aboveSubview: imageView)
     }
-    
-    private func setupToolbar() {
-        guard enhancedImageIsAvailable else { return }
-        
-        navigationController?.toolbar.barStyle = .blackTranslucent
-        
-        let fixedSpace = UIBarButtonItem(barButtonSystemItem: .fixedSpace, target: nil, action: nil)
-        toolbarItems = [fixedSpace, enhanceButton]
-    }
+
     
     private func setupConstraints() {
         let imageViewConstraints = [
@@ -101,29 +114,68 @@ final class ReviewViewController: UIViewController {
             view.leadingAnchor.constraint(equalTo: imageView.leadingAnchor)
         ]
         
+        let editColorsBottomAnchor: NSLayoutConstraint = {
+            if #available(iOS 11.0, *) {
+                return editColorsButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor)
+            } else {
+                return editColorsButton.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+                
+            }
+        }()
+        let editColorsButtonConstraints = [
+            editColorsBottomAnchor,
+            editColorsButton.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            editColorsButton.heightAnchor.constraint(equalToConstant: 65.0),
+            editColorsButton.widthAnchor.constraint(equalToConstant: UIScreen.main.bounds.width/2)
+        ]
+        let editEdgesBottomAnchor: NSLayoutConstraint = {
+            if #available(iOS 11.0, *) {
+                return editEdgesButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor)
+            } else {
+                return editEdgesButton.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+                
+            }
+        }()
+        let editEdgesButtonConstraints = [
+            editEdgesBottomAnchor,
+            editEdgesButton.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            editEdgesButton.heightAnchor.constraint(equalToConstant: 65.0),
+            editEdgesButton.widthAnchor.constraint(equalToConstant: UIScreen.main.bounds.width/2)
+        ]
+        
+        NSLayoutConstraint.activate(editColorsButtonConstraints)
+        NSLayoutConstraint.activate(editEdgesButtonConstraints)
         NSLayoutConstraint.activate(imageViewConstraints)
     }
     
     // MARK: - Actions
     
-    @objc private func toggleEnhancedImage() {
-        guard enhancedImageIsAvailable else { return }
-        if isCurrentlyDisplayingEnhancedImage {
+    @objc private func editEdges() {
+        let imageToEdit = results.originalImage
+        let editVC = EditScanViewController(image: imageToEdit.applyingPortraitOrientation(), quad: quad)
+        editVC.didEditResults = { [unowned self] results in self.results = results; self.imageView.image = results.scannedImage; self.originalScannedImage = results.scannedImage }
+        editVC.didEditQuad = { [unowned self] quad in self.quad = quad }
+        let navigationController = UINavigationController(rootViewController: editVC)
+        present(navigationController, animated: true)
+    }
+    
+    @objc private func editColors() {
+        editColorsButton.isSelected = !editColorsButton.isSelected
+        if editColorsButton.isSelected{
             imageView.image = results.scannedImage
-            enhanceButton.tintColor = .white
-        } else {
-            imageView.image = results.enhancedImage
-            enhanceButton.tintColor = UIColor(red: 64 / 255, green: 159 / 255, blue: 255 / 255, alpha: 1.0)
+            editColorsButton.setTitle("Edit Color", for: .normal)
+        } else{
+            imageView.image = results.scannedImage.filter(name: "CIColorControls", parameters: ["inputContrast":1.35])
+            results.scannedImage = imageView.image!
+            editColorsButton.setTitle("Restore Color", for: .normal)
         }
-        
-        isCurrentlyDisplayingEnhancedImage.toggle()
     }
     
     @objc private func finishScan() {
         guard let imageScannerController = navigationController as? ImageScannerController else { return }
         var newResults = results
-        newResults.scannedImage = results.scannedImage
-        newResults.doesUserPreferEnhancedImage = isCurrentlyDisplayingEnhancedImage
+        guard let resultImage = imageView.image else { return }
+        newResults.scannedImage = resultImage
         imageScannerController.imageScannerDelegate?.imageScannerController(imageScannerController, didFinishScanningWithResults: newResults)
     }
 

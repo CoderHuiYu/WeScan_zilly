@@ -12,6 +12,9 @@ import AVFoundation
 /// The `EditScanViewController` offers an interface for the user to edit the detected quadrilateral.
 final class EditScanViewController: UIViewController {
     
+    var didEditResults: ((ImageScannerResults) -> ())?
+    var didEditQuad: ((Quadrilateral) -> ())?
+    
     lazy private var imageView: UIImageView = {
         let imageView = UIImageView()
         imageView.clipsToBounds = true
@@ -30,9 +33,16 @@ final class EditScanViewController: UIViewController {
         return quadView
     }()
     
-    lazy private var nextButton: UIBarButtonItem = {
-        let title = NSLocalizedString("wescan.edit.button.next", tableName: nil, bundle: Bundle(for: EditScanViewController.self), value: "Next", comment: "A generic next button")
-        let button = UIBarButtonItem(title: title, style: .plain, target: self, action: #selector(pushReviewController))
+    lazy private var cancelButton: UIBarButtonItem = {
+        let title = NSLocalizedString("wescan.edit.button.cancel", tableName: nil, bundle: Bundle(for: EditScanViewController.self), value: "Cancel", comment: "A generic cancel button")
+        let button = UIBarButtonItem(title: title, style: .plain, target: self, action: #selector(navigationControllerPop))
+        button.tintColor = navigationController?.navigationBar.tintColor
+        return button
+    }()
+    
+    lazy private var saveButton: UIBarButtonItem = {
+        let title = NSLocalizedString("wescan.edit.button.save", tableName: nil, bundle: Bundle(for: EditScanViewController.self), value: "Save", comment: "A generic save button")
+        let button = UIBarButtonItem(title: title, style: .plain, target: self, action: #selector(finishEditing))
         button.tintColor = navigationController?.navigationBar.tintColor
         return button
     }()
@@ -66,7 +76,8 @@ final class EditScanViewController: UIViewController {
         setupViews()
         setupConstraints()
         title = NSLocalizedString("wescan.edit.title", tableName: nil, bundle: Bundle(for: EditScanViewController.self), value: "Edit Scan", comment: "The title of the EditScanViewController")
-        navigationItem.rightBarButtonItem = nextButton
+        navigationItem.rightBarButtonItem = saveButton
+        navigationItem.leftBarButtonItem = cancelButton
         
         zoomGestureController = ZoomGestureController(image: image, quadView: quadView)
         
@@ -124,7 +135,17 @@ final class EditScanViewController: UIViewController {
     
     // MARK: - Actions
     
-    @objc func pushReviewController() {
+    @objc func navigationControllerPop() {
+        if navigationController?.viewControllers.first == self {
+            self.dismiss(animated: true) {
+                
+            }
+        } else {
+            navigationController?.popViewController(animated: true)
+        }
+    }
+    
+    @objc func finishEditing() {
         guard let quad = quadView.quad,
             let ciImage = CIImage(image: image) else {
                 if let imageScannerController = navigationController as? ImageScannerController {
@@ -147,8 +168,6 @@ final class EditScanViewController: UIViewController {
             "inputBottomRight": CIVector(cgPoint: cartesianScaledQuad.topRight)
             ])
         
-        let enhancedImage = filteredImage.applyingAdaptiveThreshold()?.withFixedOrientation()
-        
         var uiImage: UIImage!
         
         // Let's try to generate the CGImage from the CIImage before creating a UIImage.
@@ -158,14 +177,12 @@ final class EditScanViewController: UIViewController {
             uiImage = UIImage(ciImage: filteredImage, scale: 1.0, orientation: .up)
         }
         
-        let finalImage = uiImage.withFixedOrientation()
-        
-        let results = ImageScannerResults(originalImage: image, scannedImage: finalImage, enhancedImage: enhancedImage, doesUserPreferEnhancedImage: false, detectedRectangle: scaledQuad)
-        let reviewViewController = ReviewViewController(results: results)
-        
-        navigationController?.pushViewController(reviewViewController, animated: true)
+        let results = ImageScannerResults(originalImage: image, scannedImage: uiImage, enhancedImage: nil, doesUserPreferEnhancedImage: false, detectedRectangle: scaledQuad)
+        didEditResults?(results)
+        didEditQuad?(scaledQuad)
+        dismiss(animated: true, completion: nil)
     }
-
+    
     private func displayQuad() {
         let imageSize = image.size
         let imageFrame = CGRect(origin: quadView.frame.origin, size: CGSize(width: quadViewWidthConstraint.constant, height: quadViewHeightConstraint.constant))

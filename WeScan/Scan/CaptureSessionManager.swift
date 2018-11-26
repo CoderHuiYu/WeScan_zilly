@@ -202,6 +202,11 @@ final class CaptureSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffe
         }
     }
     
+    func filteredImageUsingContrastFilter(image: CIImage) -> CIImage{
+        let  filter = CIFilter(name: "CIColorControls", parameters: ["inputContrast":(1.35),kCIInputImageKey:image])
+        return (filter?.outputImage!)!
+    }
+    
     private func processRectangle(rectangle: Quadrilateral?, imageSize: CGSize) {
         if let rectangle = rectangle {
             
