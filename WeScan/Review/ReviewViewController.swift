@@ -166,7 +166,6 @@ final class ReviewViewController: UIViewController {
             editColorsButton.setTitle("Edit Color", for: .normal)
         } else{
             imageView.image = results.scannedImage.filter(name: "CIColorControls", parameters: ["inputContrast":1.35])
-            results.scannedImage = imageView.image!
             editColorsButton.setTitle("Restore Color", for: .normal)
         }
     }
